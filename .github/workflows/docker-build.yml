@@ -16,6 +16,18 @@ jobs:
       packages: write
 
     steps:
+      - name: Limpeza ultra agressiva de disco no runner (libera ~25GB a mais antes de particionar)
+        run: |
+          echo "=== Espaco antes da limpeza ==="
+          df -h
+          sudo rm -rf /opt/hostedtoolcache
+          sudo rm -rf /usr/share/swift
+          sudo rm -rf /usr/local/share/boost
+          sudo rm -rf /usr/share/rust
+          sudo rm -rf /usr/local/lib/node_modules
+          echo "=== Espaco depois da limpeza ==="
+          df -h
+
       - name: Maximize build space
         uses: easimon/maximize-build-space@master
         with:
