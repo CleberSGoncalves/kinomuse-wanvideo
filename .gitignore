@@ -1,0 +1,41 @@
+# Ambientes Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+
+# Arquivos sensíveis - NUNCA commitar!
+.env
+*.env.local
+*.key
+
+# Arquivos temporários e outputs
+temp/
+outputs/
+*.mp4
+*.avi
+
+# Modelos e pesos (muito grandes)
+*.safetensors
+*.ckpt
+*.pt
+*.pth
+*.bin
+
+# Logs
+*.log
+logs/
+
+# IDE
+.vscode/
+.idea/
+*.code-workspace
+
+# Windows
+Thumbs.db
+desktop.ini
+
+# Testes de arquivos grandes
+tests/*.mp4
+tests/*.avi

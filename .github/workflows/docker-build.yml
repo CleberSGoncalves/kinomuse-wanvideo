@@ -1,0 +1,65 @@
+name: Build & Push Docker Image (GHCR)
+
+# Dispara quando voce der push na branch main
+# OU manualmente pelo GitHub (Actions -> Run workflow)
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Dockerfile'          # so rebuilda se o Dockerfile mudar
+  workflow_dispatch:          # permite rodar manualmente qualquer hora
+
+env:
+  IMAGE_NAME: kinomuse-wanvideo
+  REGISTRY: ghcr.io
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    # Precisa de permissao para escrever pacotes no GHCR
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout codigo
+        uses: actions/checkout@v4
+
+      - name: Login no GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extrair metadados da imagem
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest
+
+      - name: Build e Push da imagem
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          # CACHE_BUST garante que WanVideoWrapper seja re-clonado (versao com start_step corrigido)
+          build-args: |
+            CACHE_BUST=2026-05-27
+            HF_TOKEN=${{ secrets.HF_TOKEN }}
+          # Cache para acelerar builds futuros (nao re-baixa tudo toda vez)
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Imagem publicada com sucesso!
+        run: |
+          echo "=================================="
+          echo "Imagem disponivel em:"
+          echo "ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:latest"
+          echo ""
+          echo "Agora atualize o endpoint no RunPod:"
+          echo "https://www.runpod.io/console/serverless/5qf5a2h1ojhgcz"
+          echo "=================================="
