@@ -16,19 +16,40 @@ jobs:
       packages: write
 
     steps:
+      - name: Maximize build space
+        uses: easimon/maximize-build-space@v1.0.8
+        with:
+          root-reserve-mb: 5120
+          temp-reserve-mb: 100
+          remove-dotnet: 'true'
+          remove-android: 'true'
+          remove-haskell: 'true'
+          remove-codeql: 'true'
+          remove-docker-images: 'true'
+
       - name: Checkout codigo
         uses: actions/checkout@v4
 
       - name: Login no GitHub Container Registry
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-      - name: Build da imagem
+      - name: Build da imagem (com log detalhado)
         run: |
+          set -e
+          echo "Iniciando build..."
           docker build \
+            --progress=plain \
             --build-arg CACHE_BUST=2026-05-27 \
             --build-arg HF_TOKEN="${{ secrets.HF_TOKEN }}" \
             -t ${{ env.IMAGE }} \
-            .
+            . 2>&1 | tee /tmp/build.log
+          echo "Build concluido!"
+
+      - name: Mostrar log de erro se falhar
+        if: failure()
+        run: |
+          echo "=== ULTIMAS 100 LINHAS DO LOG ==="
+          tail -100 /tmp/build.log || echo "Log nao disponivel"
 
       - name: Push da imagem
         run: docker push ${{ env.IMAGE }}
@@ -36,8 +57,5 @@ jobs:
       - name: Imagem publicada!
         run: |
           echo "=================================="
-          echo "Imagem disponivel em:"
-          echo "${{ env.IMAGE }}"
-          echo "Atualize o endpoint no RunPod:"
-          echo "https://www.runpod.io/console/serverless/5qf5a2h1ojhgcz"
+          echo "Imagem: ${{ env.IMAGE }}"
           echo "=================================="
