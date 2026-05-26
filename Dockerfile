@@ -2,6 +2,9 @@
 FROM runpod/worker-comfyui:5.8.4-base
 
 ARG HF_TOKEN=""
+
+# Garante que o utilitário curl esteja instalado no container base para os downloads dos modelos
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 # IMPORTANTE: Altere esta data para forçar o Docker a re-clonar os custom nodes
 # e garantir versoes atualizadas (ex: WanVideoWrapper com start_step/end_step corrigidos)
 ARG CACHE_BUST=2026-05-27
