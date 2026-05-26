@@ -35,7 +35,7 @@ jobs:
 
       - name: Build da imagem (com log detalhado)
         run: |
-          set -e
+          set -eo pipefail
           echo "Iniciando build..."
           docker build \
             --progress=plain \
