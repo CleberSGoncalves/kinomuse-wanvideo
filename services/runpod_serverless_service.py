@@ -172,11 +172,11 @@ class RunPodServerlessService:
                             del workflow["62"]["inputs"][opt]
 
                 # 6. Resolver BlockSwap (node 51): garantir que block_swap_args seja inline
-                # se o node 51 nao existe ou e referencia invalida, usar valores padrao
+                # e que novos parâmetros como vace_blocks_to_swap estejam presentes (evitando crash por NoneType)
                 if "51" in workflow:
-                    inp51 = workflow["51"].get("inputs", {})
-                    # Manter node 51 como esta (WanVideoBlockSwapArgs)
-                    pass
+                    if "inputs" not in workflow["51"]:
+                        workflow["51"]["inputs"] = {}
+                    workflow["51"]["inputs"]["vace_blocks_to_swap"] = 0
                 if "50" in workflow:
                     # Garantir que model aponte para 22
                     workflow["50"]["inputs"]["model"] = ["22", 0]
