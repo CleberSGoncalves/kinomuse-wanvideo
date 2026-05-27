@@ -7,7 +7,7 @@ ARG HF_TOKEN=""
 RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 # IMPORTANTE: Altere esta data para forçar o Docker a re-clonar os custom nodes
 # e garantir versoes atualizadas (ex: WanVideoWrapper com start_step/end_step corrigidos)
-ARG CACHE_BUST=2026-05-27
+ARG CACHE_BUST=2026-05-27-v2
 
 # install custom nodes + dependencies
 RUN git clone --depth=1 https://github.com/kijai/ComfyUI-KJNodes /comfyui/custom_nodes/ComfyUI-KJNodes && \
@@ -32,9 +32,6 @@ RUN echo "WanVideoWrapper build date: ${CACHE_BUST}" && \
 
 # CRITICO: instala dependencias Python do WanVideoWrapper (sem isso os nodes nao carregam)
 RUN pip install "diffusers>=0.33.0" accelerate einops "peft>=0.17" ftfy
-
-# PERFORMANCE: Instala o SageAttention (acelera a inferência do WanVideo em até 2x!)
-RUN pip install sageattention==2.2.0 --no-build-isolation || true
 
 # Copia o script de download/linkagem de modelos dinâmicos para dentro do container
 COPY download_models.py /comfyui/download_models.py
