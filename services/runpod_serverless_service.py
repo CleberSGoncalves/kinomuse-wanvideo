@@ -200,7 +200,7 @@ class RunPodServerlessService:
                     workflow.pop("48")
                 if "22" in workflow:
                     workflow["22"]["inputs"].pop("compile_args", None)
-                    workflow["22"]["inputs"]["attention_mode"] = "sdpa"
+                    workflow["22"]["inputs"]["attention_mode"] = "comfy"
                     workflow["22"]["inputs"]["base_precision"] = "fp16_fast"
                     # Garantir que node 35 (compile_args) nao seja referenciado
                     if "35" in workflow:
