@@ -165,7 +165,7 @@ class RunPodServerlessService:
                     if node_id == "62" and isinstance(inp.get("num_frames"), list):
                         inp["num_frames"] = int(video_length)
 
-                # 5. Limpa conexoes de mascara
+                # 5. Limpa conexoes de mascara e poses nao utilizadas (evita crash de NoneType por tentar referenciar nós deletados)
                 if "62" in workflow:
                     for opt in ["face_images", "bg_images", "mask"]:
                         if opt in workflow["62"]["inputs"]:
@@ -185,6 +185,8 @@ class RunPodServerlessService:
                     "150", "151",
                     "42", "75", "77", "112", "152",
                     "50", "51", # Remover BlockSwap
+                    # "73",     # Preservar o DWPreprocessor para extração de movimento!
+                    "30",       # Remover VHS_VideoCombine
                 }
                 for n in nodes_to_remove:
                     workflow.pop(n, None)
@@ -192,12 +194,28 @@ class RunPodServerlessService:
                 if "48" in workflow:
                     workflow.pop("48")
                 if "22" in workflow:
-                    workflow["22"]["inputs"]["compile_args"] = None
                     workflow["22"]["inputs"]["attention_mode"] = "sdpa"
                     workflow["22"]["inputs"]["base_precision"] = "bf16"
-                    # Garantir que node 35 (compile_args) nao seja referenciado
-                    if "35" in workflow:
-                        workflow.pop("35", None)
+                    workflow["22"]["inputs"]["load_device"] = "offload_device"
+                    
+                    # Forcar o modelo WanAnimate correto se a animacao for usada
+                    if "62" in workflow and (local_video_path or video_url):
+                        workflow["22"]["inputs"]["model"] = "WanVideo/2_2/Wan2_2-Animate-14B_fp8_e4m3fn_scaled_KJ.safetensors"
+
+
+                # 8. Adicionar SaveAnimatedWEBP nativo para forçar o worker a detectar a saída
+                # O VHS_VideoCombine retorna em "gifs", que o handler ignora. SaveAnimatedWEBP retorna em "images".
+                workflow["999"] = {
+                    "inputs": {
+                        "filename_prefix": "Kinomuse_Output",
+                        "fps": float(fps),
+                        "lossless": False,
+                        "quality": 85,
+                        "method": "default",
+                        "images": ["28", 0]
+                    },
+                    "class_type": "SaveAnimatedWEBP"
+                }
 
                 # 6. Monta o input_data com o workflow e imagens
                 input_data = {

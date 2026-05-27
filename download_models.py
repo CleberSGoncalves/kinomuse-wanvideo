@@ -43,6 +43,12 @@ MODELS_TO_DOWNLOAD = [
         "url": "https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/diffusion_models/wan2.1_i2v_480p_14B_fp8_e4m3fn.safetensors",
         "dest_volume": VOLUME_ROOT / "models/diffusion_models",
         "dest_comfy": COMFY_ROOT / "models/diffusion_models"
+    },
+    {
+        "name": "Wan2_2-Animate-14B_fp8_e4m3fn_scaled_KJ.safetensors",
+        "url": "https://huggingface.co/Kijai/WanVideo-comfy/resolve/main/Wan2_2/Wan2_2-Animate-14B_fp8_e4m3fn_scaled_KJ.safetensors",
+        "dest_volume": VOLUME_ROOT / "models/diffusion_models/WanVideo/2_2",
+        "dest_comfy": COMFY_ROOT / "models/diffusion_models/WanVideo/2_2"
     }
 ]
 
