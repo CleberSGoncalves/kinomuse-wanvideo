@@ -171,27 +171,20 @@ class RunPodServerlessService:
                         if opt in workflow["62"]["inputs"]:
                             del workflow["62"]["inputs"][opt]
 
-                # 6. Resolver BlockSwap (node 51): garantir que block_swap_args seja inline
-                # e que novos parâmetros como vace_blocks_to_swap estejam presentes (evitando crash por NoneType)
-                if "51" in workflow:
-                    if "inputs" not in workflow["51"]:
-                        workflow["51"]["inputs"] = {}
-                    workflow["51"]["inputs"]["vace_blocks_to_swap"] = 0
-                if "50" in workflow:
-                    # Garantir que model aponte para 22
-                    workflow["50"]["inputs"]["model"] = ["22", 0]
-                    # Garantir que block_swap_args exista
-                    if "51" not in workflow:
-                        # Se node 51 foi removido, remover a referencia
-                        workflow["50"]["inputs"].pop("block_swap_args", None)
+                # 6. Desativar completamente o BlockSwap (nodes 50 e 51)
+                # Como rodamos em GPUs potentes (RTX 4090 de 24GB ou H100 de 80GB), o block swap e desnecessario
+                # e sua remocao elimina incompatibilidades e erros de NoneType estruturais.
+                if "27" in workflow:
+                    workflow["27"]["inputs"]["model"] = ["22", 0]
 
-                # 7. Limpa nos nao utilizados no serverless
+                # 7. Limpa nos nao utilizados no serverless (incluindo BlockSwap 50/51)
                 nodes_to_remove = {
                     "96", "99", "100", "102", "104",
                     "107", "108", "120",
                     "110", "171",
                     "150", "151",
                     "42", "75", "77", "112", "152",
+                    "50", "51", # Remover BlockSwap
                 }
                 for n in nodes_to_remove:
                     workflow.pop(n, None)
