@@ -134,38 +134,62 @@ class RunPodServerlessService:
                     # Usar os schedulers/samplers válidos do template WanVideoSampler
                     workflow["27"]["inputs"]["scheduler"] = str(kwargs.get("scheduler", "unipc"))
                     workflow["27"]["inputs"]["sampler"] = str(kwargs.get("sampler", "dpm++_sde"))
-                    # Critico: WanVideoSampler versoes novas requerem start_step/end_step
-                    # Se ausentes, ficam None e causam TypeError na comparacao '>' com int
-                    workflow["27"]["inputs"]["start_step"] = 0
-                    workflow["27"]["inputs"]["end_step"] = -1
+                # 3. CRITICO: Fixar resolucao do DWPreprocessor (node 73) ANTES de remover node 152
+                # O node 152 (INTConstant para resolution) sera removido, entao precisamos
+                # substituir a referencia ["152", 0] por um valor direto AGORA.
                 if "73" in workflow:
-                    workflow["73"]["inputs"]["resolution"] = 512
+                    inp73 = workflow["73"]["inputs"]
+                    # Se resolution ainda e uma referencia ao node 152, substituir por valor direto
+                    if isinstance(inp73.get("resolution"), list):
+                        inp73["resolution"] = 512
+                    else:
+                        inp73["resolution"] = inp73.get("resolution", 512)
 
-                # 3. Injeta resolucoes substituindo referencias do INTConstant
+                # 4. CRITICO: Fixar width/height no node 62 ANTES de remover nodes 150/151
+                # Os nodes 150 (width) e 151 (height) serao removidos, precisamos
+                # substituir as referencias por valores diretos.
                 for node_id in ["62", "63", "64"]:
                     if node_id not in workflow:
                         continue
                     inp = workflow[node_id]["inputs"]
-                    if inp.get("width") == ["150", 0]:
-                        inp["width"] = width
-                    if inp.get("height") == ["151", 0]:
-                        inp["height"] = height
-                    if inp.get("custom_width") == ["150", 0]:
-                        inp["custom_width"] = width
-                    if inp.get("custom_height") == ["151", 0]:
-                        inp["custom_height"] = height
+                    # Substituir qualquer referencia de link para width/height por valores diretos
+                    if isinstance(inp.get("width"), list):
+                        inp["width"] = int(width)
+                    if isinstance(inp.get("height"), list):
+                        inp["height"] = int(height)
+                    if isinstance(inp.get("custom_width"), list):
+                        inp["custom_width"] = int(width)
+                    if isinstance(inp.get("custom_height"), list):
+                        inp["custom_height"] = int(height)
+                    # num_frames: se for referencia ao node 63, usar valor direto
+                    if node_id == "62" and isinstance(inp.get("num_frames"), list):
+                        inp["num_frames"] = int(video_length)
 
-                # 4. Limpa conexoes de mascara
+                # 5. Limpa conexoes de mascara
                 if "62" in workflow:
                     for opt in ["face_images", "bg_images", "mask"]:
                         if opt in workflow["62"]["inputs"]:
-                            workflow["62"]["inputs"][opt] = None
+                            del workflow["62"]["inputs"][opt]
 
-                # 5. Limpa nos nao utilizados no serverless
+                # 6. Resolver BlockSwap (node 51): garantir que block_swap_args seja inline
+                # se o node 51 nao existe ou e referencia invalida, usar valores padrao
+                if "51" in workflow:
+                    inp51 = workflow["51"].get("inputs", {})
+                    # Manter node 51 como esta (WanVideoBlockSwapArgs)
+                    pass
+                if "50" in workflow:
+                    # Garantir que model aponte para 22
+                    workflow["50"]["inputs"]["model"] = ["22", 0]
+                    # Garantir que block_swap_args exista
+                    if "51" not in workflow:
+                        # Se node 51 foi removido, remover a referencia
+                        workflow["50"]["inputs"].pop("block_swap_args", None)
+
+                # 7. Limpa nos nao utilizados no serverless
                 nodes_to_remove = {
                     "96", "99", "100", "102", "104",
                     "107", "108", "120",
-                    "110", "171", "35",
+                    "110", "171",
                     "150", "151",
                     "42", "75", "77", "112", "152",
                 }
@@ -174,10 +198,11 @@ class RunPodServerlessService:
 
                 if "48" in workflow:
                     workflow.pop("48")
-                if "50" in workflow:
-                    workflow["50"]["inputs"]["model"] = ["22", 0]
                 if "22" in workflow:
                     workflow["22"]["inputs"].pop("compile_args", None)
+                    # Garantir que node 35 (compile_args) nao seja referenciado
+                    if "35" in workflow:
+                        workflow.pop("35", None)
 
                 # 6. Monta o input_data com o workflow e imagens
                 input_data = {
