@@ -12,43 +12,50 @@ MODELS_TO_DOWNLOAD = [
         "name": "yolox_l.torchscript.pt",
         "url": "https://huggingface.co/hr16/yolox-onnx/resolve/main/yolox_l.torchscript.pt",
         "dest_volume": VOLUME_ROOT / "models/annotators",
-        "dest_comfy": COMFY_ROOT / "models/annotators"
+        "dest_comfy": COMFY_ROOT / "models/annotators",
+        "min_size": 50 * 1024 * 1024 # 50MB
     },
     {
         "name": "dw-ll_ucoco_384_bs5.torchscript.pt",
         "url": "https://huggingface.co/hr16/DWPose-TorchScript-BatchSize5/resolve/main/dw-ll_ucoco_384_bs5.torchscript.pt",
         "dest_volume": VOLUME_ROOT / "models/annotators",
-        "dest_comfy": COMFY_ROOT / "models/annotators"
+        "dest_comfy": COMFY_ROOT / "models/annotators",
+        "min_size": 50 * 1024 * 1024 # 50MB
     },
     {
         "name": "clip_vision_h.safetensors",
         "url": "https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/clip_vision/clip_vision_h.safetensors",
         "dest_volume": VOLUME_ROOT / "models/clip_vision",
-        "dest_comfy": COMFY_ROOT / "models/clip_vision"
+        "dest_comfy": COMFY_ROOT / "models/clip_vision",
+        "min_size": 1000 * 1024 * 1024 # 1GB
     },
     {
         "name": "wan_2.1_vae.safetensors",
         "url": "https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/vae/wan_2.1_vae.safetensors",
         "dest_volume": VOLUME_ROOT / "models/vae",
-        "dest_comfy": COMFY_ROOT / "models/vae"
+        "dest_comfy": COMFY_ROOT / "models/vae",
+        "min_size": 500 * 1024 * 1024 # 500MB
     },
     {
         "name": "umt5-xxl-enc-bf16.safetensors",
         "url": "https://huggingface.co/Kijai/WanVideo_comfy/resolve/main/umt5-xxl-enc-bf16.safetensors",
         "dest_volume": VOLUME_ROOT / "models/text_encoders",
-        "dest_comfy": COMFY_ROOT / "models/text_encoders"
+        "dest_comfy": COMFY_ROOT / "models/text_encoders",
+        "min_size": 10 * 1024 * 1024 * 1024 # 10GB
     },
     {
         "name": "wan2.1_i2v_480p_14B_fp8_e4m3fn.safetensors",
         "url": "https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/diffusion_models/wan2.1_i2v_480p_14B_fp8_e4m3fn.safetensors",
         "dest_volume": VOLUME_ROOT / "models/diffusion_models",
-        "dest_comfy": COMFY_ROOT / "models/diffusion_models"
+        "dest_comfy": COMFY_ROOT / "models/diffusion_models",
+        "min_size": 10 * 1024 * 1024 * 1024 # 10GB
     },
     {
         "name": "Wan2_2-Animate-14B_fp8_e4m3fn_scaled_KJ.safetensors",
         "url": "https://huggingface.co/Kijai/WanVideo_comfy_fp8_scaled/resolve/main/Wan22Animate/Wan2_2-Animate-14B_fp8_e4m3fn_scaled_KJ.safetensors",
         "dest_volume": VOLUME_ROOT / "models/diffusion_models/WanVideo/2_2",
-        "dest_comfy": COMFY_ROOT / "models/diffusion_models/WanVideo/2_2"
+        "dest_comfy": COMFY_ROOT / "models/diffusion_models/WanVideo/2_2",
+        "min_size": 10 * 1024 * 1024 * 1024 # 10GB
     }
 ]
 
@@ -94,17 +101,25 @@ def main():
     for m in MODELS_TO_DOWNLOAD:
         name = m["name"]
         url = m["url"]
+        min_size = m.get("min_size", 1024 * 1024)
         
         # Define onde o arquivo final deve estar fisicamente
         physical_dest = m["dest_volume"] if use_volume else m["dest_comfy"]
         physical_file = physical_dest / name
         
-        # 1. Faz o download físico se o arquivo não existir
-        if not physical_file.exists() or physical_file.stat().st_size < 1024 * 1024: # menor que 1MB é inválido
-            print(f"[!] {name} não encontrado fisicamente em {physical_dest}. Iniciando download...")
+        # 1. Faz o download físico se o arquivo não existir ou for menor que o tamanho mínimo
+        if not physical_file.exists() or physical_file.stat().st_size < min_size:
+            if physical_file.exists():
+                print(f"[!] {name} existe mas tem tamanho inválido ({physical_file.stat().st_size} bytes). Removendo...")
+                try:
+                    physical_file.unlink()
+                except Exception as ex:
+                    print(f"[!] Erro ao remover arquivo inválido: {ex}")
+            print(f"[!] {name} não encontrado ou inválido em {physical_dest}. Iniciando download...")
             download_file(url, physical_file)
         else:
-            print(f"[OK] {name} já existe fisicamente em {physical_dest}. Download ignorado.")
+            size_gb = physical_file.stat().st_size / (1024 * 1024 * 1024)
+            print(f"[OK] {name} já existe fisicamente em {physical_dest} com tamanho válido ({size_gb:.2f} GB). Download ignorado.")
             
         # 2. Cria o link simbólico na pasta que o ComfyUI espera
         target_comfy_dir = m["dest_comfy"]
@@ -112,15 +127,19 @@ def main():
         symlink_path = target_comfy_dir / name
         
         if use_volume:
-            if symlink_path.exists():
-                if symlink_path.is_symlink():
+            if symlink_path.exists() or symlink_path.is_symlink():
+                print(f"[!] Removendo link simbólico antigo/existente: {symlink_path}")
+                try:
                     symlink_path.unlink()
-                else:
-                    print(f"[!] Conflito: {symlink_path} existe e não é link simbólico. Removendo...")
-                    symlink_path.unlink()
+                except Exception as ex:
+                    print(f"[!] Erro ao remover link simbólico: {ex}")
             
-            symlink_path.symlink_to(physical_file)
-            print(f"[OK] Link simbólico criado: {symlink_path} -> {physical_file}")
+            try:
+                symlink_path.symlink_to(physical_file)
+                print(f"[OK] Link simbólico criado: {symlink_path} -> {physical_file}")
+            except Exception as ex:
+                print(f"[ERRO] Falha ao criar link simbólico: {ex}")
+                sys.exit(1)
 
     # Cria os symlinks específicos de segurança para o DWPose
     dwpose_volume_yolox = VOLUME_ROOT / "models/annotators/yolox_l.torchscript.pt" if use_volume else COMFY_ROOT / "models/annotators/yolox_l.torchscript.pt"
@@ -134,9 +153,16 @@ def main():
     
     for sym, src in [(sym_yolox, dwpose_volume_yolox), (sym_dw, dwpose_volume_dw)]:
         if sym.exists() or sym.is_symlink():
-            sym.unlink()
-        sym.symlink_to(src)
-        print(f"[OK] Link DWPose criado: {sym} -> {src}")
+            try:
+                sym.unlink()
+            except Exception as ex:
+                print(f"[!] Erro ao remover link DWPose: {ex}")
+        try:
+            sym.symlink_to(src)
+            print(f"[OK] Link DWPose criado: {sym} -> {src}")
+        except Exception as ex:
+            print(f"[ERRO] Falha ao criar link DWPose: {ex}")
+            sys.exit(1)
 
     print("[*] [STARTUP] Todos os modelos resolvidos e linkados! Inicializando ComfyUI...")
 
