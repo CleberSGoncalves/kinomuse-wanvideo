@@ -7,7 +7,7 @@ ARG HF_TOKEN=""
 RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 # IMPORTANTE: Altere esta data para forçar o Docker a re-clonar os custom nodes
 # e garantir versoes atualizadas (ex: WanVideoWrapper com start_step/end_step corrigidos)
-ARG CACHE_BUST=2026-05-27-v2
+ARG CACHE_BUST=2026-05-28-v2
 
 # install custom nodes + dependencies
 RUN git clone --depth=1 https://github.com/kijai/ComfyUI-KJNodes /comfyui/custom_nodes/ComfyUI-KJNodes && \
@@ -29,6 +29,12 @@ RUN echo "WanVideoWrapper build date: ${CACHE_BUST}" && \
     cd /comfyui/custom_nodes/ComfyUI-WanVideoWrapper && \
     pip install -r requirements.txt || true
 
+
+# CRITICO: WanAnimatePreprocess - deteccao de pose e face especifica para o modelo Animate
+# Este custom node fornece PoseAndFaceDetection + DrawViTPose (usado no workflow oficial do Kijai)
+RUN git clone --depth=1 https://github.com/kijai/ComfyUI-WanAnimatePreprocess /comfyui/custom_nodes/ComfyUI-WanAnimatePreprocess && \
+    cd /comfyui/custom_nodes/ComfyUI-WanAnimatePreprocess && \
+    pip install -r requirements.txt || true
 
 # CRITICO: instala dependencias Python do WanVideoWrapper (sem isso os nodes nao carregam)
 RUN pip install "diffusers>=0.33.0" accelerate einops "peft>=0.17" ftfy

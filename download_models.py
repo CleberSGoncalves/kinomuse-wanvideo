@@ -141,6 +141,30 @@ def main():
                 print(f"[ERRO] Falha ao criar link simbólico: {ex}")
                 sys.exit(1)
 
+    # 3. CRITICO: Cria symlink no nivel RAIZ do diffusion_models para o modelo Animate
+    # O WanAnimateToVideo com UNETLoader procura modelos em models/diffusion_models/ no nivel raiz,
+    # mas o Animate foi baixado para uma subpasta WanVideo/2_2/.
+    _animate_model_name = "Wan2_2-Animate-14B_fp8_e4m3fn_scaled_KJ.safetensors"
+    _animate_root_symlink = COMFY_ROOT / "models/diffusion_models" / _animate_model_name
+    _animate_volume_file = VOLUME_ROOT / "models/diffusion_models/WanVideo/2_2" / _animate_model_name if use_volume else COMFY_ROOT / "models/diffusion_models/WanVideo/2_2" / _animate_model_name
+
+    if _animate_volume_file.exists():
+        if _animate_root_symlink.exists() or _animate_root_symlink.is_symlink():
+            print(f"[!] Removendo symlink raiz existente: {_animate_root_symlink}")
+            try:
+                _animate_root_symlink.unlink()
+            except Exception as ex:
+                print(f"[!] Erro ao remover symlink raiz: {ex}")
+
+        try:
+            _animate_root_symlink.symlink_to(_animate_volume_file)
+            print(f"[OK] Symlink raiz criado: {_animate_root_symlink} -> {_animate_volume_file}")
+        except Exception as ex:
+            print(f"[ERRO] Falha ao criar symlink raiz: {ex}")
+            sys.exit(1)
+    else:
+        print(f"[!] Arquivo do modelo Animate nao encontrado em {_animate_volume_file}. Symlink raiz ignorado.")
+
     # Cria os symlinks específicos de segurança para o DWPose
     dwpose_volume_yolox = VOLUME_ROOT / "models/annotators/yolox_l.torchscript.pt" if use_volume else COMFY_ROOT / "models/annotators/yolox_l.torchscript.pt"
     dwpose_volume_dw = VOLUME_ROOT / "models/annotators/dw-ll_ucoco_384_bs5.torchscript.pt" if use_volume else COMFY_ROOT / "models/annotators/dw-ll_ucoco_384_bs5.torchscript.pt"

@@ -74,10 +74,11 @@ class RunPodServerlessService:
         **kwargs
     ) -> Optional[str]:
         """
-        Envia job ao endpoint RunPod Serverless usando o template de workflow JSON.
-        Faz patches dinamicos em memoria no template e envia base64 das imagens.
+        Envia job ao endpoint RunPod Serverless usando o template WanVideoWrapper
+        com WanVideoAnimateEmbeds + WanVideoSampler (corrigido: pose resize e
+        resolucao alinhada, sem BlockSwap).
         """
-        self._log("Disparando run_inference com injeção de workflow e payload base64...")
+        self._log("Disparando run_inference com WanVideoWrapper Animate (corrigido)...")
 
         url = f"{self.base_url}/run"
         connector = aiohttp.TCPConnector(resolver=StaticResolver())
@@ -113,8 +114,8 @@ class RunPodServerlessService:
                     self._log("Erro: nao foi possivel obter base64 para o video!")
                     return None
 
-                # 1. Carrega o template
-                template_path = os.path.join(os.path.dirname(__file__), "wan_2.1_template.json")
+                # 1. Carrega o template WanVideoWrapper Animate
+                template_path = os.path.join(os.path.dirname(__file__), "wan_2.2_animate_template.json")
                 if not os.path.exists(template_path):
                     self._log(f"Erro: template nao encontrado em {template_path}")
                     return None
@@ -122,89 +123,40 @@ class RunPodServerlessService:
                 with open(template_path, "r", encoding="utf-8") as f:
                     workflow = json.load(f)
 
-                # 2. Injeta as variaveis basicas
+                # 2. Injeta prompts no WanVideoTextEncodeCached (node 65)
                 if "65" in workflow:
                     workflow["65"]["inputs"]["positive_prompt"] = prompt
                     workflow["65"]["inputs"]["negative_prompt"] = negative_prompt
+
+                # 3. Injeta resolucao nos nos que precisam (62, 64, 74)
+                for node_id in ["62", "64", "74"]:
+                    if node_id not in workflow:
+                        continue
+                    inp = workflow[node_id]["inputs"]
+                    if isinstance(inp.get("width"), (int, float)):
+                        inp["width"] = int(width)
+                    if isinstance(inp.get("height"), (int, float)):
+                        inp["height"] = int(height)
+
+                # 4. Injeta parametros de geracao no WanVideoSampler (node 27)
                 if "27" in workflow:
                     workflow["27"]["inputs"]["seed"] = int(seed)
                     workflow["27"]["inputs"]["steps"] = int(steps)
                     workflow["27"]["inputs"]["cfg"] = float(cfg)
-                    workflow["27"]["inputs"]["shift"] = float(kwargs.get("shift", 5.0))
-                    # Usar os schedulers/samplers válidos do template WanVideoSampler
-                    workflow["27"]["inputs"]["scheduler"] = str(kwargs.get("scheduler", "unipc"))
-                    workflow["27"]["inputs"]["sampler"] = str(kwargs.get("sampler", "dpm++_sde"))
-                # 3. CRITICO: Fixar resolucao do DWPreprocessor (node 73) ANTES de remover node 152
-                # O node 152 (INTConstant para resolution) sera removido, entao precisamos
-                # substituir a referencia ["152", 0] por um valor direto AGORA.
-                if "73" in workflow:
-                    inp73 = workflow["73"]["inputs"]
-                    # Se resolution ainda e uma referencia ao node 152, substituir por valor direto
-                    if isinstance(inp73.get("resolution"), list):
-                        inp73["resolution"] = 512
-                    else:
-                        inp73["resolution"] = inp73.get("resolution", 512)
+                    workflow["27"]["inputs"]["shift"] = float(kwargs.get("shift", 1.0))
 
-                # 4. CRITICO: Fixar width/height no node 62 ANTES de remover nodes 150/151
-                # Os nodes 150 (width) e 151 (height) serao removidos, precisamos
-                # substituir as referencias por valores diretos.
-                for node_id in ["62", "63", "64"]:
-                    if node_id not in workflow:
-                        continue
-                    inp = workflow[node_id]["inputs"]
-                    # Substituir qualquer referencia de link para width/height por valores diretos
-                    if isinstance(inp.get("width"), list):
-                        inp["width"] = int(width)
-                    if isinstance(inp.get("height"), list):
-                        inp["height"] = int(height)
-                    if isinstance(inp.get("custom_width"), list):
-                        inp["custom_width"] = int(width)
-                    if isinstance(inp.get("custom_height"), list):
-                        inp["custom_height"] = int(height)
-                    # num_frames: se for referencia ao node 63, usar valor direto
-                    if node_id == "62" and isinstance(inp.get("num_frames"), list):
-                        inp["num_frames"] = int(video_length)
-
-                # 5. Limpa conexoes de mascara e poses nao utilizadas (evita crash de NoneType por tentar referenciar nós deletados)
+                # 5. Injeta num_frames e pose/face_strength no WanVideoAnimateEmbeds (node 62)
                 if "62" in workflow:
-                    for opt in ["face_images", "bg_images", "mask"]:
-                        if opt in workflow["62"]["inputs"]:
-                            del workflow["62"]["inputs"][opt]
+                    workflow["62"]["inputs"]["num_frames"] = int(video_length)
+                    pose_strength = kwargs.get("pose_strength")
+                    if pose_strength is not None:
+                        workflow["62"]["inputs"]["pose_strength"] = float(pose_strength)
+                    face_strength = kwargs.get("face_strength")
+                    if face_strength is not None:
+                        workflow["62"]["inputs"]["face_strength"] = float(face_strength)
 
-                # 6. Desativar completamente o BlockSwap (nodes 50 e 51)
-                # Como rodamos em GPUs potentes (RTX 4090 de 24GB ou H100 de 80GB), o block swap e desnecessario
-                # e sua remocao elimina incompatibilidades e erros de NoneType estruturais.
-                if "27" in workflow:
-                    workflow["27"]["inputs"]["model"] = ["22", 0]
-
-                # 7. Limpa nos nao utilizados no serverless (incluindo BlockSwap 50/51)
-                nodes_to_remove = {
-                    "96", "99", "100", "102", "104",
-                    "107", "108", "120",
-                    "110", "171",
-                    "150", "151",
-                    "42", "75", "77", "112", "152",
-                    "50", "51", # Remover BlockSwap
-                    # "73",     # Preservar o DWPreprocessor para extração de movimento!
-                    "30",       # Remover VHS_VideoCombine
-                }
-                for n in nodes_to_remove:
-                    workflow.pop(n, None)
-
-                if "48" in workflow:
-                    workflow.pop("48")
-                if "22" in workflow:
-                    workflow["22"]["inputs"]["attention_mode"] = "sdpa"
-                    workflow["22"]["inputs"]["base_precision"] = "bf16"
-                    workflow["22"]["inputs"]["load_device"] = "offload_device"
-                    
-                    # Forcar o modelo WanAnimate correto se a animacao for usada
-                    if "62" in workflow and (local_video_path or video_url):
-                        workflow["22"]["inputs"]["model"] = "WanVideo/2_2/Wan2_2-Animate-14B_fp8_e4m3fn_scaled_KJ.safetensors"
-
-
-                # 8. Adicionar SaveAnimatedWEBP nativo para forçar o worker a detectar a saída
-                # O VHS_VideoCombine retorna em "gifs", que o handler ignora. SaveAnimatedWEBP retorna em "images".
+                # 6. Adiciona SaveAnimatedWEBP nativo como fallback de output
+                # WanVideoDecode (node 28) retorna IMAGE em output[0]
                 workflow["999"] = {
                     "inputs": {
                         "filename_prefix": "Kinomuse_Output",
@@ -217,7 +169,7 @@ class RunPodServerlessService:
                     "class_type": "SaveAnimatedWEBP"
                 }
 
-                # 6. Monta o input_data com o workflow e imagens
+                # 7. Monta o input_data com o workflow e imagens
                 input_data = {
                     "workflow": workflow,
                     "images": [
@@ -238,19 +190,11 @@ class RunPodServerlessService:
                     "fps": int(fps),
                     "steps": int(steps),
                     "cfg": float(cfg),
-                    "shift": float(kwargs.get("shift", 5.0)),
-                    "scheduler": str(kwargs.get("scheduler", "unipc")),
-                    "sampler": str(kwargs.get("sampler", "dpm++_sde")),
-                    "denoise_strength": 1.0,
-                    "riflex_freq_index": 0,
-                    # Critico: evita que o handler injete None no WanVideoSampler
-                    "start_step": 0,
-                    "end_step": -1
                 }
 
                 payload = {"input": input_data}
 
-                self._log("Enviando payload com workflow customizado para o RunPod...")
+                self._log("Enviando payload com WanVideoWrapper Animate para o RunPod...")
                 async with session.post(url, json=payload, headers=self.headers, ssl=False) as response:
                     if response.status not in [200, 201]:
                         res_text = await response.text()
