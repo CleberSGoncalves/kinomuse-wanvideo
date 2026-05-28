@@ -56,6 +56,20 @@ MODELS_TO_DOWNLOAD = [
         "dest_volume": VOLUME_ROOT / "models/diffusion_models/WanVideo/2_2",
         "dest_comfy": COMFY_ROOT / "models/diffusion_models/WanVideo/2_2",
         "min_size": 10 * 1024 * 1024 * 1024 # 10GB
+    },
+    {
+        "name": "yolov10m.onnx",
+        "url": "https://huggingface.co/Wan-AI/Wan2.2-Animate-14B/resolve/main/process_checkpoint/det/yolov10m.onnx",
+        "dest_volume": VOLUME_ROOT / "models/detection",
+        "dest_comfy": COMFY_ROOT / "models/detection",
+        "min_size": 10 * 1024 * 1024 # 10MB
+    },
+    {
+        "name": "vitpose-l-wholebody.onnx",
+        "url": "https://huggingface.co/JunkyByte/easy_ViTPose/resolve/main/onnx/wholebody/vitpose-l-wholebody.onnx",
+        "dest_volume": VOLUME_ROOT / "models/detection",
+        "dest_comfy": COMFY_ROOT / "models/detection",
+        "min_size": 100 * 1024 * 1024 # 100MB
     }
 ]
 

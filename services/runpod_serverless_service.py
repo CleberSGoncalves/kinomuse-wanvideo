@@ -114,10 +114,16 @@ class RunPodServerlessService:
                     self._log("Erro: nao foi possivel obter base64 para o video!")
                     return None
 
-                # 1. Carrega o template WanVideoWrapper Animate
-                template_path = os.path.join(os.path.dirname(__file__), "wan_2.2_animate_template.json")
+                # 1. Seleciona e carrega o template (v1 = DWPreprocessor, v2 = WanAnimatePreprocess)
+                template_version = kwargs.get("template_version", "v2")
+                if template_version == "v2":
+                    template_name = "wan_2.2_animate_v2_template.json"
+                else:
+                    template_name = "wan_2.2_animate_template.json"
+
+                template_path = os.path.join(os.path.dirname(__file__), template_name)
                 if not os.path.exists(template_path):
-                    self._log(f"Erro: template nao encontrado em {template_path}")
+                    self._log(f"Erro: template {template_name} nao encontrado em {template_path}")
                     return None
                     
                 with open(template_path, "r", encoding="utf-8") as f:
@@ -128,8 +134,19 @@ class RunPodServerlessService:
                     workflow["65"]["inputs"]["positive_prompt"] = prompt
                     workflow["65"]["inputs"]["negative_prompt"] = negative_prompt
 
-                # 3. Injeta resolucao nos nos que precisam (62, 64, 74)
-                for node_id in ["62", "64", "74"]:
+                # 3. Injeta largura/altura no VHS_LoadVideo (custom_width/custom_height)
+                if "63" in workflow:
+                    workflow["63"]["inputs"]["custom_width"] = int(width)
+                    workflow["63"]["inputs"]["custom_height"] = int(height)
+
+                # 4. Injeta resolucao nos nos que precisam (62, 64 e nodes de pose)
+                nodes_to_inject = ["62", "64"]
+                if template_version == "v1":
+                    nodes_to_inject.append("74")  # ImageResizeKJv2 for DWPreprocessor output
+                else:
+                    nodes_to_inject.extend(["76", "77"])  # PoseAndFaceDetection + DrawViTPose
+
+                for node_id in nodes_to_inject:
                     if node_id not in workflow:
                         continue
                     inp = workflow[node_id]["inputs"]
@@ -155,8 +172,13 @@ class RunPodServerlessService:
                     if face_strength is not None:
                         workflow["62"]["inputs"]["face_strength"] = float(face_strength)
 
-                # 6. Adiciona SaveAnimatedWEBP nativo como fallback de output
-                # WanVideoDecode (node 28) retorna IMAGE em output[0]
+                # 6. Ajusta tiled_vae para v2 se nao presente (node 62)
+                if "62" in workflow and "tiled_vae" not in workflow["62"]["inputs"]:
+                    workflow["62"]["inputs"]["tiled_vae"] = False
+                if "62" in workflow and "vae_tile_size" in workflow["62"]["inputs"]:
+                    del workflow["62"]["inputs"]["vae_tile_size"]
+
+                # 7. Adiciona SaveAnimatedWEBP nativo como fallback de output
                 workflow["999"] = {
                     "inputs": {
                         "filename_prefix": "Kinomuse_Output",
